@@ -211,6 +211,8 @@ bool timeval_to_ms (const struct timeval *, DWORD &);
 
 /* Console related */
 void init_console_handler (bool);
+bool is_exit_process_tree_active ();
+void wait_for_exit_process_tree ();
 
 extern bool wsock_started;
 

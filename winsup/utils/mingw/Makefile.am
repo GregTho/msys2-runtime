@@ -19,6 +19,7 @@ CFLAGS_COMMON=-Wimplicit-fallthrough=4 -Werror -D_WIN32_WINNT=0x0a00 -DNTDDI_VER
 AM_CXXFLAGS=-fno-exceptions -fno-rtti -fno-use-cxa-atexit $(flags_common) $(CFLAGS_COMMON)
 
 AM_LDFLAGS = -static
+target_builddir = @target_builddir@
 
 bin_PROGRAMS = \
 	cygcheck \
@@ -34,12 +35,16 @@ getprocaddr32.o: %32.o: %.c
 
 getprocaddr32.exe: %.exe: %.o
 	$(MINGW32_CC) -o $@ $^ -static -ldbghelp
+	@$(MKDIR_P) ${target_builddir}/winsup/testsuite/testinst/usr/libexec/
+	$(AM_V_at)$(INSTALL_PROGRAM) $@ ${target_builddir}/winsup/testsuite/testinst/usr/libexec/$@
 
 getprocaddr64.o: %64.o: %.c
 	$(MINGW64_CC) -c -o $@ $<
 
 getprocaddr64.exe: %.exe: %.o
 	$(MINGW64_CC) -o $@ $^ -static -ldbghelp
+	@$(MKDIR_P) ${target_builddir}/winsup/testsuite/testinst/usr/libexec/
+	$(AM_V_at)$(INSTALL_PROGRAM) $@ ${target_builddir}/winsup/testsuite/testinst/usr/libexec/$@
 
 cygcheck_SOURCES = \
 	bloda.cc \

@@ -194,6 +194,10 @@ pinfo::maybe_set_exit_code_from_windows ()
       WaitForSingleObject (hProcess, INFINITE);	/* just to be safe, in case
 						   process hasn't quite exited
 						   after closing pipe */
+      /* Ensure wait_sig finishes updating sigExeced and sweeping the process
+	 tree in exceptions.cc before set_exit_code() consumes sigExeced. */
+      if (self == myself)
+	wait_for_exit_process_tree ();
       GetExitCodeProcess (hProcess, &x);
       set_exit_code (x);
     }
@@ -448,7 +452,12 @@ pinfo::init (pid_t n, DWORD flag, HANDLE h0)
       if (flag & PID_NEW)
 	procinfo->start_time = time (NULL);
       if (created)
-	procinfo->pid = n;
+	{
+	  procinfo->pid = n;
+	  /* Persist caller-supplied process_state flags (e.g. PID_NOTCYGWIN
+	     from spawn_guts) before create_winpid_symlink() exposes the entry. */
+	  procinfo->process_state |= flag & (PID_NOTCYGWIN | PID_NEW_PG);
+	}
 
       h = h0;	/* Success! */
       break;

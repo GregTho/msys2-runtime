@@ -907,17 +907,25 @@ child_info_spawn::worker (const char *prog_arg, const char *const *argv,
 	    }
 	  if (sem)
 	    __posix_spawn_sem_release (sem, 0);
-	  if (term_spawn_worker.need_cleanup ())
+	  /* MSYS2 also sets sigExeced via exit_process_tree() in exceptions.cc
+	     when stdio is redirected (!iscygwin ()), so run this loop for all
+	     non-Cygwin _P_OVERLAY children, not only term_spawn_worker. */
+	  if (!iscygwin () || term_spawn_worker.need_cleanup ())
 	    {
 	      LONG prev_sigExeced = sigExeced;
 	      while (cygwait (pi.hProcess, 100) != WAIT_OBJECT_0)
 		/* If child process does not exit in predetermined time
 		   period, the process does not seem to be terminated by
 		   the signal sigExeced. Therefore, clear sigExeced here. */
-		prev_sigExeced =
-		  InterlockedCompareExchange (&sigExeced, 0, prev_sigExeced);
+		if (is_exit_process_tree_active ())
+		  prev_sigExeced = 0;
+		else
+		  prev_sigExeced =
+		    InterlockedCompareExchange (&sigExeced, 0, prev_sigExeced);
+	      wait_for_exit_process_tree ();
 	      term_spawn_worker.cleanup ();
 	    }
+	  wait_for_exit_process_tree ();
 	  /* Make sure that ctrl_c_handler() is not on going. Calling
 	     init_console_handler(false) locks until returning from
 	     ctrl_c_handler(). This insures that setting sigExeced

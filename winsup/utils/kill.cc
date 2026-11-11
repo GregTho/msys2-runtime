@@ -292,7 +292,19 @@ forcekill (pid_t pid, DWORD winpid, int sig, int wait)
     /* pid is used for printing only after this point */
     pid = dwpid = winpid;
 
-  HANDLE h = OpenProcess (PROCESS_TERMINATE, FALSE, dwpid);
+  DWORD access = PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION
+		 | SYNCHRONIZE;
+  HANDLE h = OpenProcess (access, FALSE, dwpid);
+  if (!h)
+    {
+      access = PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION;
+      h = OpenProcess (access, FALSE, dwpid);
+    }
+  if (!h)
+    {
+      access = PROCESS_TERMINATE;
+      h = OpenProcess (access, FALSE, dwpid);
+    }
   if (!h)
     {
       if (!wait || GetLastError () != ERROR_INVALID_PARAMETER)
@@ -300,21 +312,9 @@ forcekill (pid_t pid, DWORD winpid, int sig, int wait)
 		 prog_name, (unsigned int) dwpid);
       return;
     }
-  if (!wait || WaitForSingleObject (h, 200) != WAIT_OBJECT_0)
-    {
-      HANDLE cur = GetCurrentProcess (), h2;
-      /* duplicate handle with access rights required for exit_process_tree() */
-      if (DuplicateHandle (cur, h, cur, &h2, PROCESS_CREATE_THREAD |
-			      PROCESS_QUERY_INFORMATION |
-			      PROCESS_VM_OPERATION |
-			      PROCESS_VM_WRITE | PROCESS_VM_READ |
-			      PROCESS_TERMINATE, FALSE, 0))
-      {
-        CloseHandle(h);
-        h = h2;
-      }
-      exit_process_tree (h, 128 + sig);
-    }
+  if (!wait || !(access & SYNCHRONIZE)
+      || WaitForSingleObject (h, 200) != WAIT_OBJECT_0)
+    exit_process_tree (h, 128 + sig);
   CloseHandle (h);
 }
 

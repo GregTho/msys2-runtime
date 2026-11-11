@@ -58,6 +58,28 @@ extern uint8_t _sigbe;
 extern uint8_t _sigdelayed_end;
 
 static BOOL ctrl_c_handler (DWORD);
+/* Two-part synchronization for sigExeced when wait_sig signals a captive
+   non-Cygwin process via exit_process_tree():
+   - exit_tree_active lets spawn.cc's 100ms cygwait loop skip clearing
+     sigExeced while exit_process_tree() is in flight without blocking.
+   - exit_tree_lock lets spawn.cc and pinfo::maybe_set_exit_code_from_windows()
+     wait until wait_sig finishes updating sigExeced and sweeping descendants
+     after ch_spawn exits before reading sigExeced or exiting the stub. */
+static NO_COPY SRWLOCK exit_tree_lock = SRWLOCK_INIT;
+static NO_COPY LONG exit_tree_active;
+
+bool
+is_exit_process_tree_active ()
+{
+  return InterlockedOr (&exit_tree_active, 0) != 0;
+}
+
+void
+wait_for_exit_process_tree ()
+{
+  AcquireSRWLockExclusive (&exit_tree_lock);
+  ReleaseSRWLockExclusive (&exit_tree_lock);
+}
 
 static const struct
 {
@@ -1688,7 +1710,19 @@ dosig:
           sigproc_printf ("terminating captive process");
           if (::cygheap->ctty)
 	    ::cygheap->ctty->cleanup_before_exit ();
-          rc = exit_process_tree (ch_spawn, 128 + (sigExeced = si.si_signo));
+          InterlockedIncrement (&exit_tree_active);
+          AcquireSRWLockExclusive (&exit_tree_lock);
+          sigExeced = si.si_signo;
+          exit_process_tree (ch_spawn, 128 + si.si_signo);
+          if (WaitForSingleObject (ch_spawn, 0) == WAIT_OBJECT_0)
+            sigExeced = si.si_signo;
+          else if (si.si_signo == SIGINT || si.si_signo == SIGQUIT)
+            /* Interactive Win32 targets (such as REPLs) may catch Ctrl+C /
+               Ctrl+Break and stay alive; clear sigExeced so a later normal
+               ExitProcess(0) reports WIFEXITED(0) rather than WIFSIGNALED. */
+            sigExeced = 0;
+          ReleaseSRWLockExclusive (&exit_tree_lock);
+          InterlockedDecrement (&exit_tree_active);
           goto done;
         }
     }
