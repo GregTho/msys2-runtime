@@ -16,7 +16,7 @@ override CC = @MINGW_CC@
 override CXX = @MINGW_CXX@
 AM_CPPFLAGS =
 
-noinst_PROGRAMS = cygrun cygload
+noinst_PROGRAMS = cygrun cygload win32-proctree
 
 cygrun_SOURCES = \
 	../cygrun.c
@@ -24,3 +24,7 @@ cygrun_SOURCES = \
 cygload_SOURCES = \
 	../winsup.api/cygload.cc
 cygload_LDFLAGS=-static -Wl,-e,cygloadCRTStartup
+
+win32_proctree_SOURCES = \
+	../winsup.api/win32-proctree.c
+win32_proctree_LDFLAGS = -static
